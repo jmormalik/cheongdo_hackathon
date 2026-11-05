@@ -1,0 +1,29 @@
+{
+  "scenarioId": "cheongdo-persimmon-postharvest",
+  "dataKind": "fixture",
+  "reviewedAt": null,
+  "sources": [],
+  "cards": [
+    {
+      "id": "fixture-card-01",
+      "title": "예시 점검 항목 1",
+      "reason": "화면과 근거 연결 흐름을 보여 주기 위한 가상 문구입니다. 실제 청도 반시 자료에 근거하지 않습니다.",
+      "caution": "실제 재배·선별·저장 판단이나 농업 권고로 사용하지 마세요.",
+      "evidenceIds": ["fixture-evidence-01"]
+    },
+    {
+      "id": "fixture-card-02",
+      "title": "예시 점검 항목 2",
+      "reason": "화면과 근거 연결 흐름을 보여 주기 위한 가상 문구입니다. 실제 청도 반시 자료에 근거하지 않습니다.",
+      "caution": "실제 재배·선별·저장 판단이나 농업 권고로 사용하지 마세요.",
+      "evidenceIds": ["fixture-evidence-02"]
+    },
+    {
+      "id": "fixture-card-03",
+      "title": "예시 점검 항목 3",
+      "reason": "화면과 근거 연결 흐름을 보여 주기 위한 가상 문구입니다. 실제 청도 반시 자료에 근거하지 않습니다.",
+      "caution": "실제 재배·선별·저장 판단이나 농업 권고로 사용하지 마세요.",
+      "evidenceIds": ["fixture-evidence-03"]
+    }
+  ]
+}
