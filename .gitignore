@@ -4,3 +4,9 @@ __pycache__/
 .pytest_cache/
 *.py[cod]
 .env
+build/
+*.egg-info/
+AppHost/bin/
+AppHost/obj/
+.aspire/
+aspire-output/

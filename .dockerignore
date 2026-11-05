@@ -1,0 +1,12 @@
+.git
+.venv
+.env
+**/__pycache__
+**/*.pyc
+build
+*.egg-info
+AppHost/bin
+AppHost/obj
+.aspire
+aspire-output
+tests

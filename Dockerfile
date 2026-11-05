@@ -2,6 +2,7 @@ FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    COPILOT_CLI_EXTRACT_DIR=/opt/copilot-runtime \
     PORT=8000
 
 WORKDIR /app
@@ -9,6 +10,9 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY app ./app
 RUN pip install --no-cache-dir .
+RUN python -m copilot download-runtime
+RUN useradd --create-home --uid 10001 farming && chown -R farming:farming /app /opt/copilot-runtime
+USER farming
 
 EXPOSE 8000
 

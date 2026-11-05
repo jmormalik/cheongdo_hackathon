@@ -21,10 +21,18 @@
 
 ### 준비 방법
 
-1. 사용할 GitHub 계정 또는 조직에 Copilot 사용 권한과 Copilot CLI 사용 정책이 허용되어 있는지 확인한다.
+1. 사용할 GitHub 계정에 Copilot 사용 권한과 Copilot CLI 사용 정책이 허용되어 있는지 확인한다. 개인 fine-grained PAT는 본인 계정을 Resource owner로 지정하고 Account permissions의 `Copilot Requests`만 허용한다. 짧은 만료 기간을 사용한다. Classic PAT는 사용하지 않는다.
 2. [GitHub Copilot SDK 인증 문서](https://github.com/github/copilot-sdk/blob/main/docs/auth/authenticate.md)에 따라 서버에서 사용할 인증 방식을 선택한다.
 3. 해커톤 P0에서는 SDK가 우선 확인하는 `COPILOT_GITHUB_TOKEN`을 Azure Container Apps Secret으로 저장한다.
 4. Container App의 런타임 환경 변수 `COPILOT_GITHUB_TOKEN`이 해당 Secret을 참조하도록 설정한다.
+
+현재 배포용 브랜치는 토큰 없이도 정적 카드와 근거를 공개하며, AI 요청은 `configuration_error`로 명시적으로 실패한다. 토큰을 등록하려면 로컬 터미널에서 다음을 실행한다. 입력은 화면에 표시되지 않으며 토큰을 명령 인수나 저장소에 기록하지 않는다.
+
+```bash
+python3 scripts/set-copilot-secret.py --resource-group cheongdo-farming-demo --app this-week-farming
+```
+
+스크립트는 권한이 제한된 임시 요청 파일을 사용하고 작업 후 삭제한다. Azure Secret `copilot-token`과 환경 변수 참조를 등록하여 새 리비전을 생성한다. 등록 후 아래 `--ai` 검사를 실행한다. Copilot 사용 권한이나 조직 정책 문제는 Azure Secret 등록만으로 해결되지 않는다.
 
 GitHub Copilot 인증은 Azure Managed Identity로 대체할 수 없다. Managed Identity는 Azure 리소스 접근에 사용하며, Copilot SDK는 GitHub 인증이 필요하다.
 
@@ -67,14 +75,14 @@ Aspire 또는 Container Apps 배포 중 리소스 공급자 등록 권한 오류
 
 ## 3. 로컬 배포 도구
 
-J 역할의 현재 구현은 Python 3.11 이상, .NET 9 AppHost, Docker, Azure CLI, Aspire를 사용한다.
+현재 배포 구현은 Python 3.11 이상, .NET 10 AppHost, Docker, Azure CLI, Aspire 13.6.4를 사용한다.
 
 | 도구 | 용도 | 확인 명령 |
 | --- | --- | --- |
 | Python 3.11+ | FastAPI·Copilot SDK 실행 | `python3 --version` |
 | Docker | 단일 컨테이너 이미지 빌드 | `docker --version` |
 | Azure CLI | 구독 선택·Azure 로그인·배포 확인 | `az --version` |
-| .NET 9 SDK | `AppHost/` 빌드·실행 | `dotnet --info` |
+| .NET 10 SDK | `AppHost/` 빌드·실행 | `dotnet --info` |
 | Aspire CLI | AppHost 실행·배포 | `aspire --version` |
 
 프로젝트는 다음 Python 패키지 버전을 고정했다.
@@ -83,6 +91,7 @@ J 역할의 현재 구현은 Python 3.11 이상, .NET 9 AppHost, Docker, Azure C
 - `github-copilot-sdk==1.0.28`
 - `fastapi==0.115.12`
 - `uvicorn==0.34.0`
+- `azure-monitor-opentelemetry==1.8.11`
 
 패키지 설치와 컨테이너 빌드는 J 역할에서 검증했지만, 실제 Copilot 인증·Aspire 배포는 아직 검증되지 않았다.
 
@@ -91,8 +100,8 @@ J 역할의 현재 구현은 Python 3.11 이상, .NET 9 AppHost, Docker, Azure C
 | 담당 | 다음 통합에 필요한 산출물 | 상태 |
 | --- | --- | --- |
 | J | FastAPI·SSE·Agent 게이트웨이·Dockerfile·AppHost | `feature/runtime-agent`에 구현됨 |
-| T | `app/guidance.py`, `app/data/guidance.json`, 고정 시나리오와 근거 검증 | 필요 |
-| S | `app/static/` UI, 카드·근거 보기·SSE 상태 처리 | 필요 |
+| T | `app/guidance.py`, `app/data/guidance.json`, 고정 시나리오와 근거 검증 | dev에 통합됨; 자료는 fixture |
+| S | `app/static/` UI, 카드·근거 보기·SSE 상태 처리 | dev에 통합됨 |
 
 T 자료가 연결되면 J는 `GuidanceService` 인터페이스로 실제 카드를 반환하고, `GetCropGuidance`가 실제 도구 호출로 자료를 가져오는 E2E를 검증한다. S UI가 연결되면 공개 동선과 SSE 상태를 함께 검증한다.
 
@@ -120,3 +129,29 @@ S UI 구현: 완료 / 진행 중
 5. 시간 초과·취소·AI 오류에서 질문 원문과 비밀이 로그에 없고, 카드가 유지되는지 확인한다.
 
 실제 SDK 또는 Azure 배포를 검증하기 전에는 성공했다고 주장하지 않는다.
+
+## 7. Aspire 배포 재현
+
+학생 구독의 허용 지역 정책을 먼저 확인한다. 이 세션에서 `koreacentral`은 차단됐고 `japaneast`가 허용됐다. 리소스 그룹 자체도 배포할 지역에 생성한다. 현재 Aspire가 생성하는 Bicep은 해당 그룹 위치를 기본값으로 사용하므로 다른 지역의 기존 그룹을 재사용하지 않는다.
+
+```bash
+az account show --output table
+az group create --name cheongdo-farming-demo --location japaneast
+export Azure__SubscriptionId="<사용할 구독 ID>"
+export Azure__ResourceGroup=cheongdo-farming-demo
+export Azure__Location=japaneast
+export Azure__CredentialSource=AzureCli
+export DOCKER_DEFAULT_PLATFORM=linux/amd64
+aspire publish --apphost AppHost/AppHost.csproj --output-path aspire-output --non-interactive
+aspire deploy --apphost AppHost/AppHost.csproj --environment DemoJapan --non-interactive
+```
+
+AppHost가 ACR, 이미지 가져오기용 관리 ID와 AcrPull, Container Apps 환경·앱, 공유 Log Analytics, Application Insights를 정의한다. 현재 자원은 CPU 0.5/메모리 1Gi/복제본 1개로 제한한다. liveness는 `/healthz`, readiness는 `/api/guidance`를 검사한다. 로그·사용자 정의 지표·명시적인 질문 추적을 Azure Monitor로 내보내며, 질문 원문이나 답변 본문은 관측 데이터에 넣지 않는다. 실제 Azure 조회 결과를 확인하기 전에는 수신 검증 완료로 표시하지 않는다.
+
+```bash
+node scripts/smoke-deployment.mjs https://<공개 앱 도메인>
+# 토큰 등록 이후 실제 질문을 한 번 호출한다. fixture와 실제 모델 호출은 구분한다.
+node scripts/smoke-deployment.mjs https://<공개 앱 도메인> --ai
+```
+
+토큰을 Portal/등록 스크립트로 추가한 후 Aspire를 재배포하면 선언에 없는 설정이 제거될 수 있다. 재배포 시 안전한 로컬 환경으로 `Parameters__copilot-token`을 공급하여 AppHost가 Secret을 선언하도록 하거나, 배포 후 등록 스크립트로 다시 주입한다. 토큰 값을 명령줄에 직접 쓰지 않는다. 현재 구성에는 Key Vault 및 OIDC 자동화가 포함되어 있지 않으며, 단일 복제본의 고가용성이나 전역 처리 제한을 보장하지 않는다.

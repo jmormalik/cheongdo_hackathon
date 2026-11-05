@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.agent import AgentExecutionError, CropAgent, CropGuidanceAgent
@@ -19,6 +19,7 @@ from app.contracts.models import Guidance, QuestionRequest, SCENARIO_ID
 from app.contracts.services import GuidanceService, GuidanceUnavailableError
 from app.guidance import JsonGuidanceService
 from app.contracts.sse import SseEventFactory
+from app.telemetry import configure_telemetry, question_span, record_question, record_tool
 
 logger = logging.getLogger(__name__)
 MAX_CONCURRENT_AI_REQUESTS = 2
@@ -35,6 +36,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        configure_telemetry()
         yield
 
     app = FastAPI(title="This Week Farming", lifespan=lifespan)
@@ -68,6 +70,10 @@ def create_app(
         )
 
     static_dir = Path(__file__).parent / "static"
+    @app.get("/demo", include_in_schema=False)
+    async def demo() -> FileResponse:
+        return FileResponse(static_dir / "index.html")
+
     app.mount("/static", StaticFiles(directory=static_dir), name="static-assets")
     app.mount("/", StaticFiles(directory=static_dir, html=True, check_dir=False), name="static")
     return app
@@ -111,8 +117,10 @@ async def _question_events(
     events = SseEventFactory(request_id)
     progress: asyncio.Queue[str] = asyncio.Queue()
     started_at = time.monotonic()
+    span = question_span()
 
     async def report_progress(stage: str) -> None:
+        record_tool(stage)
         await progress.put(stage)
 
     task = asyncio.create_task(agent.answer(question, guidance, report_progress))
@@ -128,8 +136,10 @@ async def _question_events(
                 timeout=0.25,
                 return_when=asyncio.FIRST_COMPLETED,
             )
-            for pending_task in pending:
-                pending_task.cancel()
+            # Keep the model task alive while waiting for the next progress event.
+            if progress_task not in done:
+                progress_task.cancel()
+                await asyncio.gather(progress_task, return_exceptions=True)
             if progress_task in done:
                 yield events.build("status", {"stage": progress_task.result()})
 
@@ -161,6 +171,10 @@ async def _question_events(
         await asyncio.gather(task, return_exceptions=True)
         semaphore.release()
         duration_ms = round((time.monotonic() - started_at) * 1_000)
+        outcome_value = locals().get("outcome", "cancelled")
+        record_question(outcome_value, duration_ms)
+        span.set_attribute("outcome", outcome_value)
+        span.end()
         logger.info(
             "question_completed request_id=%s tool=GetCropGuidance outcome=%s duration_ms=%s",
             request_id,
