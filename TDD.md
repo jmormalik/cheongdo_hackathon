@@ -7,6 +7,7 @@
 ```text
 AppHost/                 # 단일 앱 등록, Container Apps 배포 대상
 app/main.py              # FastAPI, 정적 UI, API, healthz
+app/contracts/           # J가 소유하는 공유 데이터·SSE 계약
 app/agent.py             # 공식 SDK 통합, 요청별 세션, 도구 권한
 app/guidance.py          # JSON 조회, 근거 ID 검증
 app/data/guidance.json   # 시나리오 1개, 카드 최대 3개
