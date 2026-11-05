@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import asyncio
 
 from app.agent import ProgressCallback
 from app.contracts.models import Answer, AnswerKind, Card, DataKind, Guidance, QuestionRequest, Source
@@ -68,6 +69,27 @@ def test_healthz_is_available_without_guidance_data() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_public_ui_and_module_assets_are_served() -> None:
+    client = TestClient(create_app())
+    for path in ("/", "/demo", "/static/styles.css", "/static/app.js", "/static/sse.mjs", "/static/contracts.mjs"):
+        assert client.get(path).status_code == 200, path
+
+
+def test_delayed_agent_survives_progress_and_polling() -> None:
+    class DelayedAgent(FixtureCropAgent):
+        async def answer(self, request, guidance, progress):
+            await progress("tool_running")
+            await asyncio.sleep(0.4)
+            return await super().answer(request, guidance, progress)
+
+    response = TestClient(create_app(crop_agent=DelayedAgent())).post(
+        "/api/questions", json={"scenarioId": "cheongdo-persimmon-postharvest", "question": "점검 이유"}
+    )
+    assert "event: result" in response.text
+    assert '"outcome": "success"' in response.text
+    assert "event: complete" in response.text
 
 
 def test_guidance_returns_server_owned_scenario() -> None:

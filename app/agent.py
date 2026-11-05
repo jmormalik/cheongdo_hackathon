@@ -79,10 +79,21 @@ class CropGuidanceAgent:
         guidance: Guidance,
         progress: ProgressCallback,
     ) -> Answer:
+        if not os.environ.get("COPILOT_GITHUB_TOKEN"):
+            raise AgentExecutionError(
+                "configuration_error", "AI 연결을 준비 중입니다. 점검 카드는 계속 확인할 수 있습니다.",
+                retryable=False,
+            )
         await progress("agent_running")
         tool_state = ToolExecutionState()
+        tool_calls = 0
 
-        async def get_crop_guidance(ctx: FunctionInvocationContext) -> str:
+        async def GetCropGuidance(ctx: FunctionInvocationContext) -> str:
+            """Read the fixed Cheongdo persimmon guidance and its evidence IDs."""
+            nonlocal tool_calls
+            tool_calls += 1
+            if tool_calls > 3:
+                raise RuntimeError("tool_call_limit")
             await progress("tool_running")
             server_guidance = ctx.kwargs["guidance"]
             tool_state.called = True
@@ -94,12 +105,13 @@ class CropGuidanceAgent:
 
         options = GitHubCopilotOptions(
             enable_file_hooks=False,
+            available_tools=["GetCropGuidance"],
             timeout=self._settings.timeout_seconds,
             **({"model": self._settings.model} if self._settings.model else {}),
         )
         agent = GitHubCopilotAgent(
             instructions=_INSTRUCTIONS,
-            tools=[get_crop_guidance],
+            tools=[GetCropGuidance],
             default_options=options,
         )
         prompt = self._build_prompt(request, guidance)
@@ -117,14 +129,14 @@ class CropGuidanceAgent:
                 )
         except TimeoutError as error:
             raise AgentExecutionError(
-                "model_timeout",
+                "timeout",
                 "AI 설명 생성 시간이 초과되었습니다. 다시 시도해 주세요.",
                 retryable=True,
             ) from error
         except asyncio.CancelledError:
             raise
         except Exception as error:
-            logger.exception("agent execution failed: %s", type(error).__name__)
+            logger.warning("agent_execution_failed error_type=%s", type(error).__name__)
             raise AgentExecutionError(
                 "model_error",
                 "AI 설명을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.",
