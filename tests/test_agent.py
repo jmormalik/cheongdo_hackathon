@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.agent import AgentExecutionError, CropGuidanceAgent, ToolExecutionState
+from app.agent import MAX_TOOL_CALLS, AgentExecutionError, CropGuidanceAgent, ToolExecutionState
 
 
 def test_agent_parser_accepts_grounded_answer_with_known_evidence() -> None:
@@ -35,3 +35,16 @@ def test_agent_validator_rejects_grounded_answer_without_a_tool_call() -> None:
 
     with pytest.raises(AgentExecutionError, match="자료 조회 없이"):
         CropGuidanceAgent._validate_evidence(answer, ToolExecutionState())
+
+
+def test_tool_execution_state_rejects_a_fourth_tool_call() -> None:
+    state = ToolExecutionState()
+
+    for _ in range(MAX_TOOL_CALLS):
+        state.record_call()
+
+    with pytest.raises(AgentExecutionError, match="조회 횟수가 제한을 초과"):
+        state.record_call()
+
+    assert state.call_count == MAX_TOOL_CALLS
+    assert state.limit_exceeded is True

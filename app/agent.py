@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from app.contracts.models import Answer, AnswerKind, Guidance, QuestionRequest
 
 logger = logging.getLogger(__name__)
+MAX_TOOL_CALLS = 3
 
 ProgressCallback = Callable[[str], Awaitable[None]]
 
@@ -54,6 +55,21 @@ class AgentExecutionError(RuntimeError):
 class ToolExecutionState:
     called: bool = False
     evidence_ids: set[str] = field(default_factory=set)
+    call_count: int = 0
+    limit_exceeded: bool = False
+
+    def record_call(self) -> None:
+        if self.call_count >= MAX_TOOL_CALLS:
+            self.limit_exceeded = True
+            raise self.limit_error()
+        self.call_count += 1
+
+    def limit_error(self) -> AgentExecutionError:
+        return AgentExecutionError(
+            "tool_call_limit_exceeded",
+            "자료 조회 횟수가 제한을 초과했습니다. 다시 시도해 주세요.",
+            retryable=True,
+        )
 
 
 @dataclass(frozen=True)
@@ -86,14 +102,10 @@ class CropGuidanceAgent:
             )
         await progress("agent_running")
         tool_state = ToolExecutionState()
-        tool_calls = 0
 
         async def GetCropGuidance(ctx: FunctionInvocationContext) -> str:
             """Read the fixed Cheongdo persimmon guidance and its evidence IDs."""
-            nonlocal tool_calls
-            tool_calls += 1
-            if tool_calls > 3:
-                raise RuntimeError("tool_call_limit")
+            tool_state.record_call()
             await progress("tool_running")
             server_guidance = ctx.kwargs["guidance"]
             tool_state.called = True
@@ -136,12 +148,17 @@ class CropGuidanceAgent:
         except asyncio.CancelledError:
             raise
         except Exception as error:
+            if tool_state.limit_exceeded:
+                raise tool_state.limit_error() from error
             logger.warning("agent_execution_failed error_type=%s", type(error).__name__)
             raise AgentExecutionError(
                 "model_error",
                 "AI 설명을 생성하지 못했습니다. 잠시 후 다시 시도해 주세요.",
                 retryable=True,
             ) from error
+
+        if tool_state.limit_exceeded:
+            raise tool_state.limit_error()
 
         answer = self._parse_answer(response)
         self._validate_evidence(answer, tool_state)
