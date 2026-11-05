@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "this-week-farming"
+version = "0.1.0"
+description = "Cheongdo persimmon postharvest hackathon MVP"
+requires-python = ">=3.11"
+dependencies = [
+    "agent-framework-github-copilot==2.1.1",
+    "fastapi==0.115.12",
+    "github-copilot-sdk==1.0.28",
+    "uvicorn[standard]==0.34.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx==0.28.1",
+    "pytest==8.3.5",
+    "pytest-asyncio==0.25.3",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
