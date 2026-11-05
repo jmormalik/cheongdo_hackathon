@@ -68,6 +68,7 @@ def create_app(
         )
 
     static_dir = Path(__file__).parent / "static"
+    app.mount("/static", StaticFiles(directory=static_dir), name="static-assets")
     app.mount("/", StaticFiles(directory=static_dir, html=True, check_dir=False), name="static")
     return app
 
