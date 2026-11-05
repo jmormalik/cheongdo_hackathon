@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.agent import AgentExecutionError, CropAgent, CropGuidanceAgent
@@ -23,6 +23,7 @@ from app.telemetry import configure_telemetry, question_span, record_question, r
 
 logger = logging.getLogger(__name__)
 MAX_CONCURRENT_AI_REQUESTS = 2
+MAX_QUESTION_BODY_BYTES = 8 * 1024
 
 
 def create_app(
@@ -40,6 +41,18 @@ def create_app(
         yield
 
     app = FastAPI(title="This Week Farming", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def limit_question_request_body(request: Request, call_next):
+        if request.method == "POST" and request.url.path == "/api/questions":
+            content_length = request.headers.get("content-length")
+            if content_length is not None and content_length.isdigit():
+                if int(content_length) > MAX_QUESTION_BODY_BYTES:
+                    return _request_too_large_response()
+
+            if len(await request.body()) > MAX_QUESTION_BODY_BYTES:
+                return _request_too_large_response()
+        return await call_next(request)
 
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
@@ -104,6 +117,18 @@ def _validate_card(card_id: str | None, guidance: Guidance) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"code": "unknown_card", "message": "선택한 점검 항목을 찾을 수 없습니다."},
         )
+
+
+def _request_too_large_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        content={
+            "detail": {
+                "code": "request_too_large",
+                "message": "질문 요청이 너무 큽니다.",
+            }
+        },
+    )
 
 
 async def _question_events(

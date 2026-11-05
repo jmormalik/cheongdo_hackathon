@@ -137,6 +137,22 @@ def test_question_rejects_an_unsupported_scenario_before_agent_execution() -> No
     assert response.json()["detail"]["code"] == "unsupported_scenario"
 
 
+def test_question_rejects_a_body_larger_than_eight_kib() -> None:
+    response = TestClient(create_app()).post(
+        "/api/questions",
+        content=(
+            b'{"scenarioId":"cheongdo-persimmon-postharvest",'
+            b'"question":"why","padding":"'
+            + b"x" * 8_192
+            + b'"}'
+        ),
+        headers={"content-type": "application/json"},
+    )
+
+    assert response.status_code == 413
+    assert response.json()["detail"]["code"] == "request_too_large"
+
+
 def test_question_streams_only_the_validated_final_answer() -> None:
     response = TestClient(
         create_app(guidance_service=FakeGuidanceService(), crop_agent=FakeCropAgent())
