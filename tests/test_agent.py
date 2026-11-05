@@ -9,7 +9,62 @@ from app.agent import (
     CropGuidanceAgent,
     ToolExecutionState,
 )
-from app.contracts.models import Answer, AnswerKind
+from app.contracts.models import Answer, AnswerKind, QuestionRequest, SCENARIO_ID
+from app.guidance import JsonGuidanceService
+
+
+@pytest.mark.asyncio
+async def test_explicit_client_auth_and_cleanup(monkeypatch):
+    import app.agent as module
+
+    token = "github_pat_test_only"
+    monkeypatch.setenv("COPILOT_GITHUB_TOKEN", token)
+    stages = []
+    closed = []
+
+    class Client:
+        def __init__(self, **kwargs):
+            assert kwargs == {"github_token": token, "use_logged_in_user": False}
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            closed.append("client")
+
+    class Agent:
+        def __init__(self, **kwargs):
+            assert isinstance(kwargs["client"], Client)
+            assert token not in repr(kwargs["default_options"])
+            self.tool = kwargs["tools"][0]
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            closed.append("agent")
+
+        async def run(self, prompt, *, function_invocation_kwargs):
+            await self.tool(SimpleNamespace(kwargs=function_invocation_kwargs))
+            source = function_invocation_kwargs["guidance"]["sources"][0]["id"]
+            import json
+            return SimpleNamespace(text=json.dumps({
+                "kind": "grounded", "text": "설명", "evidence_ids": [source],
+            }))
+
+    async def progress(stage):
+        stages.append(stage)
+
+    monkeypatch.setattr(module, "CopilotClient", Client)
+    monkeypatch.setattr(module, "GitHubCopilotAgent", Agent)
+    guidance = await JsonGuidanceService().get_guidance(SCENARIO_ID)
+    answer = await CropGuidanceAgent().answer(
+        QuestionRequest(scenarioId=SCENARIO_ID, question="이 점검 예시를 설명해 주세요."),
+        guidance, progress,
+    )
+    assert answer.evidence_ids == [guidance.sources[0].id]
+    assert stages == ["agent_running", "tool_running", "tool_done"]
+    assert closed == ["agent", "client"]
 
 
 def test_agent_parser_accepts_grounded_answer_with_known_evidence() -> None:

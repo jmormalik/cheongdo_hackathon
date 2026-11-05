@@ -12,6 +12,7 @@ from typing import Any, Protocol
 
 from agent_framework import FunctionInvocationContext
 from agent_framework.github import GitHubCopilotAgent, GitHubCopilotOptions
+from copilot import CopilotClient
 from pydantic import ValidationError
 
 from app.contracts.models import Answer, AnswerKind, Guidance, QuestionRequest
@@ -99,7 +100,8 @@ class CropGuidanceAgent:
         guidance: Guidance,
         progress: ProgressCallback,
     ) -> Answer:
-        if not os.environ.get("COPILOT_GITHUB_TOKEN"):
+        token = os.environ.get("COPILOT_GITHUB_TOKEN", "").strip()
+        if not token:
             raise AgentExecutionError(
                 "configuration_error", "AI 연결을 준비 중입니다. 점검 카드는 계속 확인할 수 있습니다.",
                 retryable=False,
@@ -125,24 +127,25 @@ class CropGuidanceAgent:
             timeout=self._settings.timeout_seconds,
             **({"model": self._settings.model} if self._settings.model else {}),
         )
-        agent = GitHubCopilotAgent(
-            instructions=_INSTRUCTIONS,
-            tools=[GetCropGuidance],
-            default_options=options,
-        )
         prompt = self._build_prompt(request, guidance)
 
         try:
-            async with agent:
-                response = await asyncio.wait_for(
-                    agent.run(
-                        prompt,
-                        function_invocation_kwargs={
-                            "guidance": guidance.model_dump(mode="json", by_alias=True),
-                        },
-                    ),
-                    timeout=self._settings.timeout_seconds,
-                )
+            # Pass credentials explicitly; never put tokens in agent options,
+            # which can be read by framework telemetry. Own client cleanup here.
+            async with asyncio.timeout(self._settings.timeout_seconds):
+                async with CopilotClient(github_token=token, use_logged_in_user=False) as client:
+                    async with GitHubCopilotAgent(
+                        client=client,
+                        instructions=_INSTRUCTIONS,
+                        tools=[GetCropGuidance],
+                        default_options=options,
+                    ) as agent:
+                        response = await agent.run(
+                            prompt,
+                            function_invocation_kwargs={
+                                "guidance": guidance.model_dump(mode="json", by_alias=True),
+                            },
+                        )
         except TimeoutError as error:
             raise AgentExecutionError(
                 "timeout",

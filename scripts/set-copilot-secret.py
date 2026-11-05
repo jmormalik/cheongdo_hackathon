@@ -8,6 +8,27 @@ from pathlib import Path
 import subprocess
 import tempfile
 import uuid
+import urllib.error
+import urllib.request
+
+
+def validate_token(token):
+    if not token.startswith(("github_pat_", "gho_", "ghu_")):
+        raise RuntimeError("지원되는 fine-grained PAT 또는 OAuth 사용자 토큰을 입력하세요.")
+    request = urllib.request.Request(
+        "https://api.github.com/user",
+        headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json",
+                 "User-Agent": "this-week-farming-deployment"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20):
+            pass
+    except urllib.error.HTTPError as error:
+        raise RuntimeError(
+            f"GitHub 토큰 인증 실패 (HTTP {error.code}). 유효한 토큰과 Copilot Requests 권한을 확인하세요."
+        ) from None
+    except (urllib.error.URLError, TimeoutError):
+        raise RuntimeError("GitHub 인증 확인에 연결하지 못했습니다. 네트워크를 확인하세요.") from None
 
 
 def azure(*args):
@@ -23,13 +44,12 @@ def main():
     parser.add_argument("--resource-group", default="cheongdo-farming-demo")
     parser.add_argument("--app", default="this-week-farming")
     args = parser.parse_args()
+    token = os.environ.get("COPILOT_GITHUB_TOKEN", "").strip() or getpass.getpass("Copilot 토큰 (화면에 표시되지 않음): ").strip()
+    validate_token(token)
     subscription = azure("account", "show", "--query", "id", "-o", "json")
     resource = f"https://management.azure.com/subscriptions/{subscription}/resourceGroups/{args.resource_group}/providers/Microsoft.App/containerApps/{args.app}"
     version = "?api-version=2025-07-01"
     app = azure("rest", "--method", "get", "--url", resource + version)
-    token = getpass.getpass("Copilot 토큰 (화면에 표시되지 않음): ").strip()
-    if not token.startswith(("github_pat_", "gho_", "ghu_")):
-        raise RuntimeError("지원되는 fine-grained PAT 또는 OAuth 사용자 토큰을 입력하세요.")
     secrets = azure("rest", "--method", "post", "--url", resource + "/listSecrets" + version)["value"]
     secrets = [secret for secret in secrets if secret["name"] != "copilot-token"]
     secrets.append({"name": "copilot-token", "value": token})

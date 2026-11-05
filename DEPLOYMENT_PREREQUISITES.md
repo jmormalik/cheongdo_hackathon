@@ -132,6 +132,24 @@ S UI 구현: 완료 / 진행 중
 
 ## 7. Aspire 배포 재현
 
+### 토큰 검증·재배포·실제 AI 확인 일괄 실행
+
+```bash
+python3 scripts/deploy-with-copilot.py
+```
+
+Aspire가 PATH에 없으면 `~/.aspire/bin/aspire`도 자동 확인한다. Aspire 또는 .NET이 없으면 Azure CLI와 Docker로 기존 앱의 ACR에 새 이미지를 올리고 앱을 갱신한다. 이 경로는 기존 Azure 앱과 이미지 가져오기 권한을 사용하며 새 인프라를 생성하지 않는다. 직접 선택하려면 다음을 실행한다.
+
+```bash
+python3 scripts/deploy-with-copilot.py --method azure-cli
+```
+
+터미널에서 Copilot Requests 권한이 있는 유효한 fine-grained PAT 또는 OAuth 사용자 토큰을 숨김 입력한다. GitHub 사용자 ID는 필요하지 않다. Azure 구독 ID는 현재 `az login` 계정에서 자동 조회한다. 기본 리소스 그룹은 `cheongdo-farming-demo`, 지역은 `japaneast`, Aspire 환경은 `DemoJapan`이며 옵션으로 변경할 수 있다. Azure 로그인과 Docker 실행이 필요하다.
+
+GitHub 인증을 확인한 뒤 Aspire로 현재 작업 폴더의 이미지를 빌드·배포한다. 토큰은 환경변수로 배포 프로세스에 전달하고, 배포 후 Secret `copilot-token`과 런타임 참조를 다시 적용한다. 마지막에 공개 URL에서 `--ai` smoke 검사를 실행한다. GitHub 기본 인증 성공이 Copilot 사용 권한까지 보장하지는 않으며, 실제 모델·도구 응답까지 통과해야 완료로 표시한다. 실패한 배포를 자동 롤백하지 않는다.
+
+기존 `scripts/set-copilot-secret.py`는 토큰만 교체할 때 사용한다. 이 스크립트만 실행하면 변경된 Python 코드가 새 이미지로 배포되지 않는다.
+
 학생 구독의 허용 지역 정책을 먼저 확인한다. 이 세션에서 `koreacentral`은 차단됐고 `japaneast`가 허용됐다. 리소스 그룹 자체도 배포할 지역에 생성한다. 현재 Aspire가 생성하는 Bicep은 해당 그룹 위치를 기본값으로 사용하므로 다른 지역의 기존 그룹을 재사용하지 않는다.
 
 ```bash
