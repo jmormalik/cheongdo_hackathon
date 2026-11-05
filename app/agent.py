@@ -18,6 +18,10 @@ from app.contracts.models import Answer, AnswerKind, Guidance, QuestionRequest
 
 logger = logging.getLogger(__name__)
 MAX_TOOL_CALLS = 3
+OUT_OF_SCOPE_MESSAGE = (
+    "이 데모는 청도 감 수확 후 점검 자료 범위에서만 설명합니다. "
+    "농약 용량, 확정 진단, 개별 농장 처방은 제공할 수 없습니다."
+)
 
 ProgressCallback = Callable[[str], Awaitable[None]]
 
@@ -162,7 +166,7 @@ class CropGuidanceAgent:
 
         answer = self._parse_answer(response)
         self._validate_evidence(answer, tool_state)
-        return answer
+        return self._normalize_answer(answer)
 
     @staticmethod
     def _build_prompt(request: QuestionRequest, guidance: Guidance) -> str:
@@ -188,6 +192,16 @@ class CropGuidanceAgent:
                 "AI 응답의 근거 형식을 확인할 수 없습니다.",
                 retryable=True,
             ) from error
+
+    @staticmethod
+    def _normalize_answer(answer: Answer) -> Answer:
+        if answer.kind is AnswerKind.OUT_OF_SCOPE:
+            return Answer(
+                kind=AnswerKind.OUT_OF_SCOPE,
+                text=OUT_OF_SCOPE_MESSAGE,
+                evidence_ids=[],
+            )
+        return answer
 
     @staticmethod
     def _validate_evidence(answer: Answer, tool_state: ToolExecutionState) -> None:
