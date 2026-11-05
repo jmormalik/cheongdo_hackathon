@@ -34,10 +34,13 @@ def main():
     secrets = [secret for secret in secrets if secret["name"] != "copilot-token"]
     secrets.append({"name": "copilot-token", "value": token})
     template = app["properties"]["template"]
-    template["revisionSuffix"] = "auth-" + uuid.uuid4().hex[:12]
+    # Express supports rolling updates but rejects explicit revision suffixes.
+    template.pop("revisionSuffix", None)
     container = next(item for item in template["containers"] if item["name"] == "this-week-farming")
     container["env"] = [item for item in container.get("env", []) if item["name"] != "COPILOT_GITHUB_TOKEN"]
     container["env"].append({"name": "COPILOT_GITHUB_TOKEN", "secretRef": "copilot-token"})
+    container["env"] = [item for item in container["env"] if item["name"] != "COPILOT_SECRET_REVISION"]
+    container["env"].append({"name": "COPILOT_SECRET_REVISION", "value": uuid.uuid4().hex})
     payload = {"properties": {"configuration": {"secrets": secrets}, "template": template}}
     descriptor, filename = tempfile.mkstemp(prefix="farming-secret-", suffix=".json")
     try:
@@ -45,6 +48,9 @@ def main():
         with os.fdopen(descriptor, "w") as stream:
             json.dump(payload, stream)
         azure("rest", "--method", "patch", "--url", resource + version, "--body", "@" + filename, "--output", "none")
+        azure("containerapp", "update", "--resource-group", args.resource_group, "--name", args.app,
+              "--set-env-vars", "COPILOT_GITHUB_TOKEN=secretref:copilot-token",
+              "COPILOT_SECRET_REVISION=" + uuid.uuid4().hex, "--output", "none")
     finally:
         Path(filename).unlink(missing_ok=True)
     print("Azure Secret과 환경 변수 참조를 등록했습니다. 새 리비전 준비 후 AI 질문을 확인하세요.")
