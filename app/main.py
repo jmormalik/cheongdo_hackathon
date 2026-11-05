@@ -111,8 +111,12 @@ async def _question_events(
     events = SseEventFactory(request_id)
     progress: asyncio.Queue[str] = asyncio.Queue()
     started_at = time.monotonic()
+    tool_called = False
 
     async def report_progress(stage: str) -> None:
+        nonlocal tool_called
+        if stage == "tool_running":
+            tool_called = True
         await progress.put(stage)
 
     task = asyncio.create_task(agent.answer(question, guidance, report_progress))
@@ -162,8 +166,9 @@ async def _question_events(
         semaphore.release()
         duration_ms = round((time.monotonic() - started_at) * 1_000)
         logger.info(
-            "question_completed request_id=%s tool=GetCropGuidance outcome=%s duration_ms=%s",
+            "question_completed request_id=%s tool=%s outcome=%s duration_ms=%s",
             request_id,
+            "GetCropGuidance" if tool_called else "none",
             locals().get("outcome", "cancelled"),
             duration_ms,
         )

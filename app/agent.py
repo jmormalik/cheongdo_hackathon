@@ -7,7 +7,7 @@ import json
 import logging
 import os
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from agent_framework import FunctionInvocationContext
@@ -50,6 +50,12 @@ class AgentExecutionError(RuntimeError):
         self.retryable = retryable
 
 
+@dataclass
+class ToolExecutionState:
+    called: bool = False
+    evidence_ids: set[str] = field(default_factory=set)
+
+
 @dataclass(frozen=True)
 class AgentSettings:
     timeout_seconds: int = 45
@@ -74,10 +80,15 @@ class CropGuidanceAgent:
         progress: ProgressCallback,
     ) -> Answer:
         await progress("agent_running")
+        tool_state = ToolExecutionState()
 
         async def get_crop_guidance(ctx: FunctionInvocationContext) -> str:
             await progress("tool_running")
             server_guidance = ctx.kwargs["guidance"]
+            tool_state.called = True
+            tool_state.evidence_ids = {
+                source["id"] for source in server_guidance["sources"]
+            }
             await progress("tool_done")
             return json.dumps(server_guidance, ensure_ascii=False)
 
@@ -121,7 +132,7 @@ class CropGuidanceAgent:
             ) from error
 
         answer = self._parse_answer(response)
-        self._validate_evidence(answer, guidance)
+        self._validate_evidence(answer, tool_state)
         return answer
 
     @staticmethod
@@ -150,12 +161,17 @@ class CropGuidanceAgent:
             ) from error
 
     @staticmethod
-    def _validate_evidence(answer: Answer, guidance: Guidance) -> None:
-        source_ids = {source.id for source in guidance.sources}
+    def _validate_evidence(answer: Answer, tool_state: ToolExecutionState) -> None:
         if answer.kind is AnswerKind.GROUNDED and not answer.evidence_ids:
             raise AgentExecutionError(
                 "answer_validation_failed",
                 "근거가 없는 AI 설명은 표시할 수 없습니다.",
+                retryable=True,
+            )
+        if answer.kind is AnswerKind.GROUNDED and not tool_state.called:
+            raise AgentExecutionError(
+                "answer_validation_failed",
+                "자료 조회 없이 생성된 AI 설명은 표시할 수 없습니다.",
                 retryable=True,
             )
         if answer.kind is AnswerKind.OUT_OF_SCOPE and answer.evidence_ids:
@@ -164,7 +180,7 @@ class CropGuidanceAgent:
                 "범위 밖 응답에 근거 ID가 포함되었습니다.",
                 retryable=True,
             )
-        if unknown_ids := set(answer.evidence_ids) - source_ids:
+        if unknown_ids := set(answer.evidence_ids) - tool_state.evidence_ids:
             raise AgentExecutionError(
                 "answer_validation_failed",
                 f"확인할 수 없는 근거 ID가 포함되었습니다: {', '.join(sorted(unknown_ids))}",
