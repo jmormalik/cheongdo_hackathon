@@ -2,7 +2,29 @@
   "scenarioId": "cheongdo-persimmon-postharvest",
   "dataKind": "fixture",
   "reviewedAt": null,
-  "sources": [],
+  "sources": [
+    {
+      "id": "fixture-evidence-01",
+      "title": "데모 예시 ID · 실제 출처 없음",
+      "url": null,
+      "publishedAt": null,
+      "scope": "로컬 fixture 식별자이며 농업적 근거나 실제 적용 범위를 제공하지 않습니다."
+    },
+    {
+      "id": "fixture-evidence-02",
+      "title": "데모 예시 ID · 실제 출처 없음",
+      "url": null,
+      "publishedAt": null,
+      "scope": "로컬 fixture 식별자이며 농업적 근거나 실제 적용 범위를 제공하지 않습니다."
+    },
+    {
+      "id": "fixture-evidence-03",
+      "title": "데모 예시 ID · 실제 출처 없음",
+      "url": null,
+      "publishedAt": null,
+      "scope": "로컬 fixture 식별자이며 농업적 근거나 실제 적용 범위를 제공하지 않습니다."
+    }
+  ],
   "cards": [
     {
       "id": "fixture-card-01",

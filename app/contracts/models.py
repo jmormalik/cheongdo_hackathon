@@ -4,10 +4,23 @@ from __future__ import annotations
 
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 SCENARIO_ID = "cheongdo-persimmon-postharvest"
+
+
+def _to_camel(value: str) -> str:
+    first, *rest = value.split("_")
+    return first + "".join(part.title() for part in rest)
+
+
+class ContractModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        alias_generator=_to_camel,
+        populate_by_name=True,
+    )
 
 
 class DataKind(StrEnum):
@@ -15,9 +28,7 @@ class DataKind(StrEnum):
     FIXTURE = "fixture"
 
 
-class Source(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class Source(ContractModel):
     id: str = Field(min_length=1, max_length=100)
     title: str = Field(min_length=1, max_length=300)
     url: str | None = None
@@ -28,9 +39,7 @@ class Source(BaseModel):
     display_text: str | None = None
 
 
-class Card(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class Card(ContractModel):
     id: str = Field(min_length=1, max_length=100)
     title: str = Field(min_length=1, max_length=200)
     reason: str = Field(min_length=1, max_length=2_000)
@@ -38,9 +47,7 @@ class Card(BaseModel):
     evidence_ids: list[str] = Field(min_length=1, max_length=10)
 
 
-class Guidance(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class Guidance(ContractModel):
     scenario_id: str = SCENARIO_ID
     data_kind: DataKind
     reviewed_at: str | None = None
@@ -48,12 +55,32 @@ class Guidance(BaseModel):
     cards: list[Card] = Field(max_length=3)
 
 
-class QuestionRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
+class QuestionRequest(ContractModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        alias_generator=None,
+        populate_by_name=True,
+        str_strip_whitespace=True,
+    )
     scenario_id: str = Field(min_length=1, max_length=100)
     card_id: str | None = Field(default=None, max_length=100)
     question: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_wire_field_names(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        normalized = dict(value)
+        for wire_name, field_name in (
+            ("scenarioId", "scenario_id"),
+            ("cardId", "card_id"),
+        ):
+            if wire_name in normalized:
+                if field_name in normalized:
+                    raise ValueError("{} and {} cannot both be provided".format(wire_name, field_name))
+                normalized[field_name] = normalized.pop(wire_name)
+        return normalized
 
 
 class AnswerKind(StrEnum):
@@ -61,9 +88,7 @@ class AnswerKind(StrEnum):
     OUT_OF_SCOPE = "out_of_scope"
 
 
-class Answer(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class Answer(ContractModel):
     kind: AnswerKind
     text: str = Field(min_length=1, max_length=4_000)
     evidence_ids: list[str] = Field(default_factory=list, max_length=10)

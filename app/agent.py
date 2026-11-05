@@ -99,7 +99,7 @@ class CropGuidanceAgent:
                     agent.run(
                         prompt,
                         function_invocation_kwargs={
-                            "guidance": guidance.model_dump(mode="json"),
+                            "guidance": guidance.model_dump(mode="json", by_alias=True),
                         },
                     ),
                     timeout=self._settings.timeout_seconds,

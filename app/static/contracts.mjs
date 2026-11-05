@@ -16,6 +16,7 @@ function validateSources(sources, dataKind) {
   for (const source of sources) {
     if (!source || !nonempty(source.id) || ids.has(source.id) || !nonempty(source.title) || !nonempty(source.scope)) invalid();
     if (dataKind === 'reviewed_static' && !safeURL(source.url)) invalid();
+    if (dataKind === 'fixture' && (source.url !== null || source.publishedAt !== null)) invalid();
     if (source.publishedAt !== null && !nonempty(source.publishedAt)) invalid();
     ids.add(source.id);
   }
@@ -25,6 +26,7 @@ function validateSources(sources, dataKind) {
 export function validateGuidance(data) {
   if (!data || data.scenarioId !== SCENARIO_ID || !kinds.includes(data.dataKind) || !Array.isArray(data.cards) || data.cards.length > 3) invalid();
   if (data.dataKind === 'reviewed_static' && !nonempty(data.reviewedAt)) invalid();
+  if (data.dataKind === 'fixture' && data.reviewedAt !== null) invalid();
   const sourceIds = validateSources(data.sources, data.dataKind);
   const cardIds = new Set();
   for (const card of data.cards) {

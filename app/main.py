@@ -17,17 +17,11 @@ from fastapi.staticfiles import StaticFiles
 from app.agent import AgentExecutionError, CropAgent, CropGuidanceAgent
 from app.contracts.models import Guidance, QuestionRequest, SCENARIO_ID
 from app.contracts.services import GuidanceService, GuidanceUnavailableError
+from app.guidance import JsonGuidanceService
 from app.contracts.sse import SseEventFactory
 
 logger = logging.getLogger(__name__)
 MAX_CONCURRENT_AI_REQUESTS = 2
-
-
-class UnavailableGuidanceService:
-    """Temporary boundary until T provides the J-owned interface implementation."""
-
-    async def get_guidance(self, scenario_id: str) -> Guidance:
-        raise GuidanceUnavailableError("Guidance data adapter is not configured.")
 
 
 def create_app(
@@ -35,7 +29,7 @@ def create_app(
     guidance_service: GuidanceService | None = None,
     crop_agent: CropAgent | None = None,
 ) -> FastAPI:
-    service = guidance_service or UnavailableGuidanceService()
+    service = guidance_service if guidance_service is not None else JsonGuidanceService()
     agent = crop_agent or CropGuidanceAgent()
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_AI_REQUESTS)
 
@@ -142,8 +136,11 @@ async def _question_events(
         yield events.build(
             "result",
             {
-                "answer": answer.model_dump(mode="json"),
-                "sources": [source.model_dump(mode="json") for source in guidance.sources],
+                "answer": answer.model_dump(mode="json", by_alias=True),
+                "sources": [
+                    source.model_dump(mode="json", by_alias=True)
+                    for source in guidance.sources
+                ],
                 "dataKind": guidance.data_kind.value,
             },
         )

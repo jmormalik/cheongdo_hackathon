@@ -6,6 +6,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Set
 from urllib.parse import urlparse
 
+from pydantic import ValidationError
+
+from app.contracts.models import Guidance
+from app.contracts.services import GuidanceService, GuidanceUnavailableError
+
 
 SCENARIO_ID = "cheongdo-persimmon-postharvest"
 DEFAULT_GUIDANCE_PATH = Path(__file__).parent / "data" / "guidance.json"
@@ -61,8 +66,6 @@ def validate_guidance(guidance: Any) -> None:
         raise GuidanceDataError("cards must be a list")
     if len(cards) > 3:
         raise GuidanceDataError("guidance may contain at most 3 cards")
-    if data_kind == "fixture" and sources:
-        raise GuidanceDataError("fixture guidance must not include source records")
     if data_kind == "reviewed_static" and not sources:
         raise GuidanceDataError("reviewed_static guidance requires at least one source")
 
@@ -78,22 +81,30 @@ def validate_guidance(guidance: Any) -> None:
 
         _require_text(source.get("title"), "title", context)
         _require_text(source.get("scope"), "scope", context)
-        url = _require_text(source.get("url"), "url", context)
-        try:
-            parsed_url = urlparse(url)
-        except ValueError as error:
-            raise GuidanceDataError("{} url is malformed".format(context)) from error
-        if (
-            parsed_url.scheme not in ("http", "https")
-            or not parsed_url.hostname
-            or parsed_url.username is not None
-            or parsed_url.password is not None
-        ):
-            raise GuidanceDataError("{} url must be an absolute HTTP(S) URL".format(context))
-
         published_at = source.get("publishedAt")
-        if published_at is not None and not _is_iso_date(published_at):
-            raise GuidanceDataError("{} publishedAt must be an ISO date or null".format(context))
+        url = source.get("url")
+        if data_kind == "fixture":
+            if url is not None or published_at is not None:
+                raise GuidanceDataError(
+                    "{} fixture source records must not claim an external URL or publication date".format(
+                        context
+                    )
+                )
+        else:
+            url = _require_text(url, "url", context)
+            try:
+                parsed_url = urlparse(url)
+            except ValueError as error:
+                raise GuidanceDataError("{} url is malformed".format(context)) from error
+            if (
+                parsed_url.scheme not in ("http", "https")
+                or not parsed_url.hostname
+                or parsed_url.username is not None
+                or parsed_url.password is not None
+            ):
+                raise GuidanceDataError("{} url must be an absolute HTTP(S) URL".format(context))
+            if published_at is not None and not _is_iso_date(published_at):
+                raise GuidanceDataError("{} publishedAt must be an ISO date or null".format(context))
 
     card_ids: Set[str] = set()
     for index, card in enumerate(cards):
@@ -119,16 +130,10 @@ def validate_guidance(guidance: Any) -> None:
                 raise GuidanceDataError("{} contains duplicate evidence id {}".format(context, evidence_id))
             seen_evidence_ids.add(evidence_id)
 
-            if data_kind == "reviewed_static":
-                if evidence_id not in source_ids:
-                    raise GuidanceDataError(
-                        "{} references unregistered source id {}".format(context, evidence_id)
-                    )
-            else:
-                if not evidence_id.startswith("fixture-"):
-                    raise GuidanceDataError(
-                        "{} fixture evidence ids must use the fixture- prefix".format(context)
-                    )
+            if evidence_id not in source_ids:
+                raise GuidanceDataError(
+                    "{} references unregistered source id {}".format(context, evidence_id)
+                )
 
 
 def load_guidance(path: Optional[Path] = None) -> Dict[str, Any]:
@@ -162,14 +167,7 @@ def validate_evidence_ids(
     if not isinstance(evidence_ids, list):
         raise GuidanceDataError("evidenceIds must be a list")
 
-    if guidance["dataKind"] == "reviewed_static":
-        allowed_ids = {source["id"] for source in guidance["sources"]}
-    else:
-        allowed_ids = {
-            evidence_id
-            for card in guidance["cards"]
-            for evidence_id in card["evidenceIds"]
-        }
+    allowed_ids = {source["id"] for source in guidance["sources"]}
 
     checked_ids: List[str] = []
     seen_ids: Set[str] = set()
@@ -183,3 +181,17 @@ def validate_evidence_ids(
         checked_ids.append(evidence_id)
 
     return checked_ids
+
+
+class JsonGuidanceService(GuidanceService):
+    """Adapt the validated JSON file to the runtime's shared Guidance contract."""
+
+    def __init__(self, path: Optional[Path] = None) -> None:
+        self._path = path
+
+    async def get_guidance(self, scenario_id: str) -> Guidance:
+        try:
+            data = get_crop_guidance(scenario_id, self._path)
+            return Guidance.model_validate(data)
+        except (GuidanceDataError, ValidationError) as error:
+            raise GuidanceUnavailableError("Guidance data is invalid or unavailable.") from error

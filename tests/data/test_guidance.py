@@ -3,7 +3,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from app.contracts.models import DataKind
+from app.contracts.services import GuidanceUnavailableError
 from app.guidance import (
+    JsonGuidanceService,
     SCENARIO_ID,
     GuidanceDataError,
     get_crop_guidance,
@@ -20,9 +23,11 @@ class GuidanceTests(unittest.TestCase):
         self.assertEqual(guidance["scenarioId"], SCENARIO_ID)
         self.assertEqual(guidance["dataKind"], "fixture")
         self.assertIsNone(guidance["reviewedAt"])
-        self.assertEqual(guidance["sources"], [])
+        self.assertEqual(len(guidance["sources"]), 3)
+        self.assertTrue(all(source["url"] is None for source in guidance["sources"]))
         self.assertLessEqual(len(guidance["cards"]), 3)
-        self.assertTrue(all(card["evidenceIds"][0].startswith("fixture-") for card in guidance["cards"]))
+        source_ids = {source["id"] for source in guidance["sources"]}
+        self.assertTrue(all(card["evidenceIds"][0] in source_ids for card in guidance["cards"]))
         self.assertTrue(all("실제 재배" in card["caution"] for card in guidance["cards"]))
 
     def test_get_crop_guidance_rejects_unknown_scenario(self):
@@ -111,8 +116,24 @@ class GuidanceTests(unittest.TestCase):
                 "scope": "Not a real citation",
             }
         ]
-        with self.assertRaisesRegex(GuidanceDataError, "must not include source records"):
+        with self.assertRaisesRegex(GuidanceDataError, "must not claim an external URL"):
             validate_guidance(guidance)
+
+    def test_json_guidance_service_adapts_data_to_shared_contract(self):
+        import asyncio
+
+        guidance = asyncio.run(JsonGuidanceService().get_guidance(SCENARIO_ID))
+
+        self.assertEqual(guidance.data_kind, DataKind.FIXTURE)
+        self.assertEqual(guidance.scenario_id, SCENARIO_ID)
+        self.assertEqual(len(guidance.cards), 3)
+        self.assertTrue(all(source.url is None for source in guidance.sources))
+
+    def test_json_guidance_service_surfaces_unavailable_scenario(self):
+        import asyncio
+
+        with self.assertRaises(GuidanceUnavailableError):
+            asyncio.run(JsonGuidanceService().get_guidance("unknown"))
 
     def test_guidance_rejects_more_than_three_cards(self):
         guidance = load_guidance()
