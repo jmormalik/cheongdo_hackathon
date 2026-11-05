@@ -1,6 +1,6 @@
 # 이번 주 농사 — MVP 기술 요구사항
 
-버전: 0.3 / 2026-11-05 / 기준: [PRD.md](PRD.md) v0.3
+버전: 0.4 / 2026-11-05 / 기준: [PRD.md](PRD.md) v0.4
 상태: 구현 기준. 코드·패키지 호환성·실제 Azure 배포는 미검증.
 
 ## 1. 구성
@@ -40,3 +40,29 @@ Aspire AppHost는 이 컨테이너 한 개와 Azure Container Apps 환경을 정
 
 ## 5. 배포 완료 증거
 소스 커밋, 도구·패키지 고정 버전, 공개 URL, 배포 리비전, 정상 질문의 비식별 실행 추적, 오류 시연 결과를 기록한다. 브라우저 Network 기록만으로 서버 내부 SDK 사용을 증명했다고 주장하지 않는다. 직전 정상 리비전과 복구 절차를 기록하며 CI/CD 구축은 P1로 둔다.
+
+## 6. 심사용 기술 설계 요약
+공식 제출 양식은 TRD를 기술 설계의 주요 출처로 사용한다. 아래 요약은 TDD를 열지 않아도 구현 경계를 판단할 수 있도록 둔다.
+
+브라우저 → 동일 출처 FastAPI → 요청별 GitHubCopilotAgent → GetCropGuidance → 정적 검토 자료 또는 명시적 fixture → 답변 근거 ID 검사 → SSE 결과 표시. Copilot SDK 모델 연결과 Agent Framework의 에이전트·도구·컨텍스트 처리를 모두 실제로 사용한다. Agent가 호출한 도구 결과만 답변 근거로 허용한다.
+
+`GET /api/guidance`는 AI와 독립적인 카드 JSON, `POST /api/questions`는 scenarioId/question 입력과 status/result/error/complete SSE, `GET /healthz`는 서버 생존 상태를 제공한다. 입력·용량 검사는 스트림 시작 전에 수행한다. 모델 실패 시 카드 유지, 오류 안내와 수동 재시도를 제공한다. 진행 스트리밍은 구현 범위이며 토큰 스트리밍은 별도 검증 전 미지원으로 기록한다.
+
+AppHost가 단일 Dockerfile 앱과 Container Apps 환경·공개 엔드포인트를 정의한다. 비밀은 Azure 서버 설정으로만 전달하고 컨테이너는 UI와 API를 함께 제공한다. 운영 로그는 요청 ID·도구명·상태·시간만 포함한다. 배포 커밋과 리비전을 기록하고 직전 정상 리비전으로 복구할 절차를 남긴다.
+
+공식 Azure 평가 기준은 불필요한 서비스 추가를 감점하며 Azure AI/모델 서비스 사용을 필수나 가산점으로 삼지 않는다. 따라서 별도 Azure AI·DB를 점수 목적으로 추가하지 않는다. Aspire 자체는 공식 필수 기술이 아니라 팀의 배포 도구 선택이다.
+
+제출 전 실제 구현 버전·검증 결과·미구현 사항을 본 문서에 갱신한다. 현재 내용은 설계이며 SDK 실행·배포 완료 증거는 아직 없다.
+
+출처: [평가 기준](https://github.com/hackersground-kr/hackathon-cheongdo/blob/main/judgement/judgement-criteria.md), [제출 양식](https://github.com/hackersground-kr/hackathon-cheongdo/blob/main/.github/ISSUE_TEMPLATE/03-result-submission.yml).
+
+## 7. 평가 기준에 맞춘 실행 계약
+- 질문 컨텍스트는 scenarioId, 선택적 cardId, 서버 계산 주간 범위, 서버 자료 상태, question이다. cardId는 서버 자료에 존재하는 값만 허용한다. 멀티턴 저장은 추가하지 않는다.
+- 하나의 GitHubCopilotAgent가 등록 도구를 호출하도록 구성한다. 자료를 서버가 프롬프트에 붙이기만 하고 에이전트 도구 호출을 생략한 경로는 완료로 인정하지 않는다.
+- 실행 증거는 requestId, 고정 SDK 버전, 실제 도구 실행 이벤트, 소요 시간, 결과 검증 상태를 연결한다. 도구 실행 전 미리 완료 이벤트를 보내지 않는다.
+- SDK의 실제 실행 이벤트를 브라우저 진행 SSE로 연결한다. 모델 토큰의 점진 출력은 P0 밖이며 실제 구현한 스트리밍 층을 제출 설명에 명시한다.
+- 선택 카드 질문 3종·범위 밖 질문·프롬프트 인젝션·허용 외 도구·잘못된 근거 ID·시간 초과·취소를 검사한다. 범위 밖 질문은 농업 답변 생성 대신 범위 안내로 처리하고 성공 근거 답변과 구분한다.
+- UI 취소는 브라우저 AbortController와 서버 연결 종료 감지를 연결하고 세션·처리 슬롯을 정리한다. 정적 카드의 열람은 계속 가능해야 한다.
+- 실제 답변에는 ‘AI 생성 설명’을 표시하고 텍스트를 안전하게 렌더링한다. 모델이 생성한 HTML을 실행하지 않는다.
+
+생산성 측정 결과는 PRD 7절에 실제 값과 한계를 기입한다. 배포·기술 검증 결과는 본 문서 5절에 기록한다. 미측정·미배포 상태를 점수 예상이나 통과 선언으로 대체하지 않는다.
