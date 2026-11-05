@@ -1,0 +1,51 @@
+{
+  "scenarioId": "cheongdo-persimmon-postharvest",
+  "dataKind": "fixture",
+  "reviewedAt": null,
+  "sources": [
+    {
+      "id": "fixture-evidence-01",
+      "title": "데모 예시 ID · 실제 출처 없음",
+      "url": null,
+      "publishedAt": null,
+      "scope": "로컬 fixture 식별자이며 농업적 근거나 실제 적용 범위를 제공하지 않습니다."
+    },
+    {
+      "id": "fixture-evidence-02",
+      "title": "데모 예시 ID · 실제 출처 없음",
+      "url": null,
+      "publishedAt": null,
+      "scope": "로컬 fixture 식별자이며 농업적 근거나 실제 적용 범위를 제공하지 않습니다."
+    },
+    {
+      "id": "fixture-evidence-03",
+      "title": "데모 예시 ID · 실제 출처 없음",
+      "url": null,
+      "publishedAt": null,
+      "scope": "로컬 fixture 식별자이며 농업적 근거나 실제 적용 범위를 제공하지 않습니다."
+    }
+  ],
+  "cards": [
+    {
+      "id": "fixture-card-01",
+      "title": "예시 점검 항목 1",
+      "reason": "화면과 근거 연결 흐름을 보여 주기 위한 가상 문구입니다. 실제 청도 반시 자료에 근거하지 않습니다.",
+      "caution": "실제 재배·선별·저장 판단이나 농업 권고로 사용하지 마세요.",
+      "evidenceIds": ["fixture-evidence-01"]
+    },
+    {
+      "id": "fixture-card-02",
+      "title": "예시 점검 항목 2",
+      "reason": "화면과 근거 연결 흐름을 보여 주기 위한 가상 문구입니다. 실제 청도 반시 자료에 근거하지 않습니다.",
+      "caution": "실제 재배·선별·저장 판단이나 농업 권고로 사용하지 마세요.",
+      "evidenceIds": ["fixture-evidence-02"]
+    },
+    {
+      "id": "fixture-card-03",
+      "title": "예시 점검 항목 3",
+      "reason": "화면과 근거 연결 흐름을 보여 주기 위한 가상 문구입니다. 실제 청도 반시 자료에 근거하지 않습니다.",
+      "caution": "실제 재배·선별·저장 판단이나 농업 권고로 사용하지 마세요.",
+      "evidenceIds": ["fixture-evidence-03"]
+    }
+  ]
+}
